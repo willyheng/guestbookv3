@@ -1,0 +1,54 @@
+(ns guestbookv3.routes.home
+  (:require
+   [guestbookv3.layout :as layout]
+   [guestbookv3.db.core :as db]
+   [clojure.java.io :as io]
+   [guestbookv3.middleware :as middleware]
+   [ring.util.response]
+   [ring.util.http-response :as response]
+   [struct.core :as st]))
+
+;; Validation
+(def message-schema
+  [[:name
+    st/required
+    st/string]
+   [:message
+    st/required
+    st/string
+    {:message "Message must contain at least 10 characters"
+     :validate (fn [msg] (> (count msg) 10))}]])
+
+(defn validate-message [params]
+  (first (st/validate params message-schema)))
+
+;; Database
+
+
+(defn save-message! [{:keys [params]}]
+  (if-let [errors (validate-message params)]
+    (-> (response/found "/")
+        (assoc :flash (assoc params :errors errors)))
+    (do (db/save-message! params)
+        (response/found "/"))))
+
+;; Routes
+
+(defn home-page [{:keys [flash] :as request}]
+  (layout/render
+   request
+   "home.html"
+   (merge {:messages (db/get-messages)}
+          (select-keys flash [:name :message :errors]))))
+
+(defn about-page [request]
+  (layout/render request "about.html"))
+
+(defn home-routes []
+  [""
+   {:middleware [middleware/wrap-csrf
+                 middleware/wrap-formats]}
+   ["/" {:get home-page}]
+   ["/message" {:post save-message!}]
+   ["/about" {:get about-page}]])
+
