@@ -39,7 +39,7 @@
 (defn send-message! [fields errors]
   (if-let [validation-errors (validate-message @fields)]
     (reset! errors validation-errors)
-    (POST "/message"
+    (POST "/api/message"
           {:format :json
            :headers {"Accept" "application/transit+json"
                      "x-csrf-token" (.-value (.getElementById js/document "token"))}
@@ -54,7 +54,7 @@
                              (reset! errors (get-in % [:response :errors])))})))
 
 (defn get-messages []
-  (GET "/messages"
+  (GET "/api/messages"
        {:headers {"Accept" "application/transit+json"}
         :handler #(rf/dispatch [:messages/set (:messages %)])
         }))
@@ -95,7 +95,7 @@
         [:label.label {:for :message} "Message"]
         [errors-component errors :message]
         [:p "Message: " (:message @fields)]
-        [:textarea.textarea
+                                        [:textarea.textarea
          {:name :message
           :on-change #(swap! fields assoc :message (-> % .-target .-value))
           :value (:message @fields)}]]
