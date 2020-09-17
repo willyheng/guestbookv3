@@ -2,29 +2,62 @@
   (:require [reagent.core :as r]
             [reagent.dom :as dom]
             [ajax.core :refer [GET POST]]
-            [guestbookv3.validation :refer [validate-message]]))
+            [guestbookv3.validation :refer [validate-message]]
+            [re-frame.core :as rf]))
+
+;; Reframe - initialize
+(rf/reg-event-fx
+ :app/initialize
+ (fn [_ _]
+   {:db {:messages/loading? true}}))
+
+;; Reframe - messages
+(rf/reg-sub
+ :messages/loading?
+ (fn [db _]
+   (:messages/loading? db)))
+
+(rf/reg-event-db
+ :messages/set
+ (fn [db [_ messages]]
+   (-> db
+       (assoc :messages/loading? false
+              :messages/list messages))))
+
+(rf/reg-sub
+ :messages/list
+ (fn [db _]
+   (:messages/list db [])))
+
+(rf/reg-event-db
+ :messages/add
+ (fn [db [_ message]]
+   (update db :messages/list conj message)))
 
 ;; Messaging
 
-(defn send-message! [fields errors messages]
-  (POST "/message"
-        {:format :json
-         :headers {"Accept" "application/transit+json"
-                   "x-csrf-token" (.-value (.getElementById js/document "token"))}
-         :params @fields
-         :handler #(do
-                     (.log js/console (str "response: " %))
-                     (swap! messages conj (assoc @fields :timestamp (js/Date.)))
-                     (reset! fields nil)
-                     (reset! errors nil))
-         :error-handler #(do
-                           (.log js/console (str "error: " %))
-                           (reset! errors (get-in % [:response :errors])))}))
+(defn send-message! [fields errors]
+  (if-let [validation-errors (validate-message @fields)]
+    (reset! errors validation-errors)
+    (POST "/message"
+          {:format :json
+           :headers {"Accept" "application/transit+json"
+                     "x-csrf-token" (.-value (.getElementById js/document "token"))}
+           :params @fields
+           :handler #(do
+                       (.log js/console (str "response: " %))
+                       (rf/dispatch [:messages/add (assoc @fields :timestamp (js/Date.))])
+                       (reset! fields nil)
+                       (reset! errors nil))
+           :error-handler #(do
+                             (.log js/console (str "error: " %))
+                             (reset! errors (get-in % [:response :errors])))})))
 
-(defn get-messages [messages]
+(defn get-messages []
   (GET "/messages"
        {:headers {"Accept" "application/transit+json"}
-        :handler #(reset! messages (:messages %))}))
+        :handler #(rf/dispatch [:messages/set (:messages %)])
+        }))
 
 (defn message-list [messages]
   (println messages)
@@ -43,7 +76,7 @@
     [:div.notification.is-danger (clojure.string/join error)]))
 
 
-(defn message-form [messages]
+(defn message-form []
   (let [fields (r/atom {})
         errors (r/atom nil)]
     (fn []
@@ -68,19 +101,23 @@
           :value (:message @fields)}]]
        [:input.button.is-primary
         {:type :submit
-         :on-click #(send-message! fields errors messages)
+         :on-click #(send-message! fields errors)
          :value "comment"}]])))
 
 (defn home []
-  (let [messages (r/atom nil)]
-    (get-messages messages)
+  (let [messages (rf/subscribe [:messages/list])]
+    (rf/dispatch [:app/initialize])
+    (get-messages)
     (fn []
       [:div.content>div.columns.is-centered>div.column.is-two-thirds
-       [:div.columns>div.column
-        [:h3 "Messages"]
-        [message-list messages]]
-       [:div.columns>div.column
-        [message-form messages]]])))
+       (if @(rf/subscribe [:messages/loading?])
+        [:h3 "Loading Messages..."]
+        [:div
+         [:div.columns>div.column
+          [:h3 "Messages"]
+          [message-list messages]]
+         [:div.columns>div.column
+          [message-form]]])])))
 
 (dom/render
  [home]
