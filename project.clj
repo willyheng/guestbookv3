@@ -69,8 +69,9 @@
   {:uberjar {:omit-source true
              :aot :all
              :uberjar-name "guestbookv3.jar"
-             :source-paths ["env/prod/clj"]
-             :resource-paths ["env/prod/resources"]}
+             :source-paths ["env/prod/clj" "env/prod/cljs" "env/prod/cljc"]
+             :resource-paths ["env/prod/resources"]
+             :prep-tasks ["compile" ["run" "-m" "shadow.cljs.devtools.cli" "release" "app"]]}
 
    :dev           [:project/dev :profiles/dev]
    :test          [:project/dev :project/test :profiles/test]
@@ -80,7 +81,8 @@
                                  [pjstadig/humane-test-output "0.10.0"]
                                  [prone "2019-07-08"]
                                  [ring/ring-devel "1.8.0"]
-                                 [ring/ring-mock "0.4.0"]]
+                                 [ring/ring-mock "0.4.0"]
+                                 [day8.re-frame/re-frame-10x "0.7.0"]]
                   :plugins      [[com.jakemccrary/lein-test-refresh "0.24.1"]
                                  [jonase/eastwood "0.3.5"]]
                   
