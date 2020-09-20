@@ -46,7 +46,9 @@
            :params @fields
            :handler #(do
                        (.log js/console (str "response: " %))
-                       (rf/dispatch [:messages/add (assoc @fields :timestamp (js/Date.))])
+                       (rf/dispatch [:messages/add (-> @fields
+                                                       (assoc :timestamp (js/Date.))
+                                                       (update :name str " [CLIENT]"))])
                        (reset! fields nil)
                        (reset! errors nil))
            :error-handler #(do
@@ -106,12 +108,10 @@
 
 (defn home []
   (let [messages (rf/subscribe [:messages/list])]
-    (rf/dispatch [:app/initialize])
-    (get-messages)
     (fn []
       [:div.content>div.columns.is-centered>div.column.is-two-thirds
        (if @(rf/subscribe [:messages/loading?])
-        [:h3 "Loading Messages..."]
+        [:h3 "Loading Messages..."] 
         [:div
          [:div.columns>div.column
           [:h3 "Messages"]
@@ -119,6 +119,14 @@
          [:div.columns>div.column
           [message-form]]])])))
 
-(dom/render
- [home]
- (.getElementById js/document "content"))
+(defn ^:dev/after-load mount-components []
+  (rf/clear-subscription-cache!)
+  (.log js/console "Mounting Components...")
+  (dom/render [#'home] (.getElementById js/document "content"))
+  (.log js/console "Components Mounted!"))
+
+(defn init! []
+  (.log js/console "Initializing App...")
+  (rf/dispatch [:app/initialize])
+  (get-messages)
+  (mount-components))

@@ -31,36 +31,39 @@
                  [ring/ring-core "1.8.0"]
                  [ring/ring-defaults "0.3.2"]
                  [selmer "1.12.18"]
-                 [org.clojure/clojurescript "1.10.238" :scope "provided"]
+                 [org.clojure/clojurescript "1.10.773" :scope "provided"]
                  [reagent "0.10.0"]
                  [cljs-ajax "0.8.0"]
-                 [re-frame "1.0.0"]]
+                 [re-frame "1.0.0"]
+                 [thheller/shadow-cljs "2.11.4"]
+                 [com.google.javascript/closure-compiler-unshaded "v20200830"]]
 
   :min-lein-version "2.0.0"
   
-  :source-paths ["src/clj" "src/cljc"]
+  :source-paths ["src/clj" "src/cljc" "src/cljs"]
   :test-paths ["test/clj"]
   :resource-paths ["resources" "target/cljsbuild"]
   :target-path "target/%s/"
   :main ^:skip-aot guestbookv3.core
 
-  :plugins [[lein-cljsbuild "1.1.7"]]
-  :cljsbuild
-  {:builds
-   {:app {:source-paths ["src/cljs" "src/cljc"]
-          :compiler {:output-to "target/cljsbuild/public/js/app.js"
-                     :output-dir "target/cljsbuild/public/js/out"
-                     :main "guestbookv3.core"
-                     :asset-path "/js/out"
-                     :optimizations :none
-                     :source-map true
-                     :pretty-print true}}}}
+  :plugins []
+  ;; :cljsbuild
+  ;; {:builds
+  ;;  {:app {:source-paths ["src/cljs" "src/cljc"]
+  ;;         :compiler {:output-to "target/cljsbuild/public/js/app.js"
+  ;;                    :output-dir "target/cljsbuild/public/js/out"
+  ;;                    :main "guestbookv3.core"
+  ;;                    :asset-path "/js/out"
+  ;;                    :optimizations :none
+  ;;                    :source-map true
+  ;;                    "pretty-print" true}}}}
 
-  :clean-targets
-  ^{:protect false}
-  [:target-path
-   [:cljsbuild :builds :app :compiler :output-dir]
-   [:cljsbuild :builds :app :compiler :output-to]]
+  ;; :clean-targets
+  ;; ^{:protect false}
+  ;; [:target-path
+  ;;  [:cljsbuild :builds :app :compiler :output-dir]
+  ;;  [:cljsbuild :builds :app :compiler :output-to]]
+
 
   :profiles
   {:uberjar {:omit-source true
@@ -73,14 +76,15 @@
    :test          [:project/dev :project/test :profiles/test]
 
    :project/dev  {:jvm-opts ["-Dconf=dev-config.edn"]
-                  :dependencies [[pjstadig/humane-test-output "0.10.0"]
+                  :dependencies [[binaryage/devtools "0.9.10"]
+                                 [pjstadig/humane-test-output "0.10.0"]
                                  [prone "2019-07-08"]
                                  [ring/ring-devel "1.8.0"]
                                  [ring/ring-mock "0.4.0"]]
                   :plugins      [[com.jakemccrary/lein-test-refresh "0.24.1"]
                                  [jonase/eastwood "0.3.5"]]
                   
-                  :source-paths ["env/dev/clj"]
+                  :source-paths ["env/dev/clj" "env/dev/cljs" "env/dev/cljc"]
                   :resource-paths ["env/dev/resources"]
                   :repl-options {:init-ns user}
                   :injections [(require 'pjstadig.humane-test-output)
