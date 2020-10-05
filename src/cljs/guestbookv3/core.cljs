@@ -3,7 +3,8 @@
             [reagent.dom :as dom]
             [ajax.core :refer [GET POST]]
             [guestbookv3.validation :refer [validate-message]]
-            [re-frame.core :as rf]))
+            [re-frame.core :as rf]
+            [guestbookv3.websockets :as ws]))
 
 ;; Reframe - initialize
 (rf/reg-event-fx
@@ -111,20 +112,16 @@
 (rf/reg-event-fx
  :message/send!
  (fn [{:keys [db]} [_ fields]]
-   (POST "/api/message"
-         {:format :json
-          :headers {"Accept" "application/transit+json"
-                    "x-csrf-token" (.-value (.getElementById js/document "token"))}
-          :params fields
-          :handler #(do
-                      (.log js/console (str "response: " %))
-                      (rf/dispatch [:messages/add
-                                    (-> fields
-                                        (assoc :timestamp (js/Date.)))]))
-          :error-handler #(rf/dispatch
-                           [:form/set-server-errors
-                            (get-in % [:response :errors])])})
+   (ws/send-message! fields) ;Send message via websockets
    {:db (dissoc db :form/server-errors)}))
+
+; Handle response from websockets
+(defn handle-response! [response]
+  (if-let [errors (:errors response)]
+    (rf/dispatch [:set-server-errors errors])
+    (do
+      (rf/dispatch [:messages/add response])
+      (rf/dispatch [:form/clear-fields]))))
 
 (defn get-messages []
   (GET "/api/messages"
@@ -213,4 +210,6 @@
 (defn init! []
   (.log js/console "Initializing App...")
   (rf/dispatch [:app/initialize])
+  (ws/connect! (str "ws://" (.-host js/location) "/ws")
+               handle-response!)
   (mount-components))
