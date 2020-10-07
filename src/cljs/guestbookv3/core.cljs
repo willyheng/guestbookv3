@@ -4,7 +4,8 @@
             [ajax.core :refer [GET POST]]
             [guestbookv3.validation :refer [validate-message]]
             [re-frame.core :as rf]
-            [guestbookv3.websockets :as ws]))
+            [guestbookv3.websockets :as ws]
+            [mount.core :as mount]))
 
 ;; Reframe - initialize
 (rf/reg-event-fx
@@ -40,9 +41,22 @@
    (:messages/list db [])))
 
 (rf/reg-event-db
- :messages/add
+ :message/add
  (fn [db [_ message]]
    (update db :messages/list conj message)))
+
+(rf/reg-event-fx
+ :message/send!
+ (fn [{:keys [db]} [_ fields]]
+   (ws/send! ;Send message via Sente
+    [:message/create! fields]
+    10000
+    (fn [{:keys [success errors] :as response}]
+      (.log js/console "Called back: " (pr-str response))
+      (if success
+        (rf/dispatch [:form/clear-fields])
+        (rf/dispatch [:form/set-server-errors errors])))) 
+   {:db (dissoc db :form/server-errors)}))
 
 ;; Form fields
 
@@ -72,8 +86,8 @@
 ;; Errors
 
 (rf/reg-event-db
- :form/set-server-error
- [(rf/path :form/server-error)]
+ :form/set-server-errors
+ [(rf/path :form/server-errors)]
  (fn [_ [_ errors]]
    errors))
 
@@ -107,20 +121,12 @@
  (fn [errors [_ id]]
    (get errors id)))
 
-;; Messaging
-
-(rf/reg-event-fx
- :message/send!
- (fn [{:keys [db]} [_ fields]]
-   (ws/send-message! fields) ;Send message via websockets
-   {:db (dissoc db :form/server-errors)}))
-
 ; Handle response from websockets
 (defn handle-response! [response]
   (if-let [errors (:errors response)]
     (rf/dispatch [:set-server-errors errors])
     (do
-      (rf/dispatch [:messages/add response])
+      (rf/dispatch [:message/add response])
       (rf/dispatch [:form/clear-fields]))))
 
 (defn get-messages []
@@ -148,7 +154,7 @@
 
 (defn message-form []
   [:div
-   [errors-component :server-error]
+   [errors-component :server-errors]
    [:div.field
     [:label.label {:for :name} "Name"]
     [errors-component :name]
@@ -209,7 +215,6 @@
 
 (defn init! []
   (.log js/console "Initializing App...")
+  (mount/start)
   (rf/dispatch [:app/initialize])
-  (ws/connect! (str "ws://" (.-host js/location) "/ws")
-               handle-response!)
   (mount-components))

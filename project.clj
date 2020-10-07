@@ -36,7 +36,8 @@
                  [cljs-ajax "0.8.0"]
                  [re-frame "1.0.0"]
                  [thheller/shadow-cljs "2.11.4"]
-                 [com.google.javascript/closure-compiler-unshaded "v20200830"]]
+                 [com.google.javascript/closure-compiler-unshaded "v20200830"]
+                 [com.taoensso/sente "1.15.0"]]
 
   :min-lein-version "2.0.0"
   
