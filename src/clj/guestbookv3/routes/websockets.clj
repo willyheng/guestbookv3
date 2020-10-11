@@ -62,10 +62,9 @@
       (reply-fn response))))
 
 (defstate channel-router
-  :start (do (sente/start-chsk-router!
-              (:ch-recv socket)
-              #'receive-message!)
-             (pr-str (:ajax-get-or-ws-handshake-fn socket)))
+  :start (sente/start-chsk-router!
+          (:ch-recv socket)
+          #'receive-message!)
   :stop (when-let [stop-fn channel-router]
           (stop-fn)))
 
