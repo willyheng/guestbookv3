@@ -5,7 +5,8 @@
             [guestbookv3.middleware :as middleware]
             [mount.core :refer [defstate]]
             [taoensso.sente :as sente]
-            [taoensso.sente.server-adapters.http-kit :refer [get-sch-adapter]]))
+            [taoensso.sente.server-adapters.http-kit :refer [get-sch-adapter]]
+            [guestbookv3.session :as session]))
 
 ;; (defonce channels (atom #{}))
 
@@ -28,10 +29,10 @@
    :id id})
 
 (defmethod handle-message :message/create!
-  [{:keys [?data uid] :as message}]
+  [{:keys [?data uid session] :as message}]
   (let [response (try
-                   (msg/save-message! ?data)
-                   (assoc ?data :timestamp (java.util.Date.))
+                   (msg/save-message! (:identity session) ?data)
+                   ;(assoc ?data :timestamp (java.util.Date.))
                    (catch Exception e
                      (let [{id :guestbook/error-id
                             errors :errors} (ex-data e)]
@@ -45,48 +46,20 @@
       (do
         (log/debug "Failed to save message: " ?data)
         response)
-      (do 
+      (do
         (doseq [uid (:any @(:connected-uids socket))]
           (send! uid [:message/add response]))
         {:success true}))))
 
-(defn receive-message! [{:keys [id ?reply-fn] :as message}]
+(defn receive-message! [{:keys [id ?reply-fn ring-req] :as message}]
   (log/debug "Got message with id: " id)
-  (let [reply-fn (or ?reply-fn (fn [_]))]
-    (when-some [response (handle-message message)]
+  (let [reply-fn (or ?reply-fn (fn [_]))
+        session (session/read-session ring-req)
+        response (-> message
+                     (assoc :session session)
+                     handle-message)]
+    (when response
       (reply-fn response))))
-
-;; (defn connect! [channel]
-;;   (log/info "Channel opened")
-;;   (swap! channels conj channel))
-
-;; (defn disconnect! [channel status]
-;;   (log/info "Channel closed")
-;;   (swap! channels disj channel))
-
-;; (defn handle-message! [channel ws-message]
-;;   (let [message (edn/read-string ws-message)
-;;         response (try
-;;                    (msg/save-message! message)
-;;                    (assoc message :timestamp (java.util.Date.))
-;;                    (catch Exception e
-;;                      (let [{id :guestbook/error-id
-;;                             errors :errors} (ex-data e)]
-;;                        (case id
-;;                          :validation
-;;                          {:errors errors}
-;;                          ;;else
-;;                          {:errors {:server-error ["Failed to save message!"]}}))))]
-;;     (if (:errors :response)
-;;       (http-kit/send! channel (pr-str response))
-;;       (doseq [channel @channels]
-;;         (http-kit/send! channel (pr-str response))))))
-
-;; (defn handler [request]
-;;   (http-kit/with-channel request channel
-;;     (connect! channel)
-;;     (http-kit/on-close channel (partial disconnect! channel))
-;;     (http-kit/on-receive channel (partial handle-message! channel))))
 
 (defstate channel-router
   :start (do (sente/start-chsk-router!

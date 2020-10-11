@@ -72,14 +72,6 @@
                :success-path [:messages]
                :success-event [:messages/set]}}))
 
-;; (rf/reg-event-fx
-;;  :messages/load
-;;  (fn [{:keys [db]} _]
-;;    (GET "/api/messages"
-;;         {:headers {"Accept" "application/transit+json"}
-;;          :handler #(rf/dispatch [:messages/set (:messages %)])})
-;;    {:db (assoc db :messages/loading? true)}))
-
 (rf/reg-sub
  :messages/list
  (fn [db _]
@@ -185,12 +177,18 @@
 (defn message-list [messages]
   (println messages)
   [:ul.messages
-   (for [{:keys [timestamp message name]} @messages]
+   (for [{:keys [timestamp message name author]} @messages]
      ^{:key timestamp}
      [:li
       [:time (.toLocaleString timestamp)]
       [:p message]
-      [:p " - " name]])])
+      [:p " - " name
+       ;; Add the author (e.g. <@username>)
+       " <"
+       (if author
+         (str "@" author)
+         [:span.is-italic "account not found"]) ">"
+       ]])])
 
 ;; Modal window
 
