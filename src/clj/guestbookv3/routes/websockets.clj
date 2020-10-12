@@ -6,7 +6,9 @@
             [mount.core :refer [defstate]]
             [taoensso.sente :as sente]
             [taoensso.sente.server-adapters.http-kit :refer [get-sch-adapter]]
-            [guestbookv3.session :as session]))
+            [guestbookv3.session :as session]
+            [guestbookv3.auth :as auth]
+            [guestbookv3.auth.ws :refer [authorized?]]))
 
 ;; (defonce channels (atom #{}))
 
@@ -53,13 +55,24 @@
 
 (defn receive-message! [{:keys [id ?reply-fn ring-req] :as message}]
   (log/debug "Got message with id: " id)
-  (let [reply-fn (or ?reply-fn (fn [_]))
-        session (session/read-session ring-req)
-        response (-> message
-                     (assoc :session session)
-                     handle-message)]
-    (when response
-      (reply-fn response))))
+  (case id
+    :chsk/bad-package (log/debug "Bad package:\n" message)
+    :chsk/bad-event (log/debug "Bad event:\n" message)
+    :chsk/uidport-open (log/trace (:event message))
+    :chsk/uidport-close (log/trace (:event message))
+    :chsk/ws-ping nil
+    ;; else    
+    (let [reply-fn (or ?reply-fn (fn [_]))
+          session (session/read-session ring-req)
+          message (-> message
+                      (assoc :session session))]
+      (if (authorized? auth/roles message)
+        (when-some [response (handle-message message)]
+          (reply-fn response))
+        (do
+          (log/info "Unauthorized message: " id)
+          (reply-fn {:message "You are not authorized to perform this action!"
+                     :errors {:unauthorized true}}))))))
 
 (defstate channel-router
   :start (sente/start-chsk-router!

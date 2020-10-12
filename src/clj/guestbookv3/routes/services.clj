@@ -13,7 +13,9 @@
    [reitit.ring.middleware.parameters :as parameters]
    [guestbookv3.middleware.formats :as formats]
    [guestbookv3.auth :as auth]
-   [spec-tools.data-spec :as ds]))
+   [spec-tools.data-spec :as ds]
+   [guestbookv3.auth.ring :refer [wrap-authorized get-roles-from-match]]
+   [clojure.tools.logging :as log]))
 
 (defn service-routes []
   ["/api"
@@ -32,18 +34,38 @@
                  ;; coercing request parameters
                  coercion/coerce-request-middleware
                  ;; Multipart params
-                 multipart/multipart-middleware]
+                 multipart/multipart-middleware
+                 (fn [handler]
+                   (wrap-authorized
+                    handler
+                    (fn handle-unauthorized [req]
+                      (let [route-roles (get-roles-from-match req)]
+                        (log/debug
+                         "Roles for route: "
+                         (:uri req)
+                         route-roles)
+                        (log/debug "User is unauthorized!"
+                                   (-> req
+                                       :session
+                                       :identity
+                                       :roles))
+                        (response/forbidden
+                         {:message
+                          (str "User must have one of the following roles: "
+                               route-roles)})))))]
     :muuntaja formats/instance
     :coercion spec-coercion/coercion
     :swagger {:id ::api}}
-   ["" {:no-doc true}
+   ["" {:no-doc true
+        ::auth/roles (auth/roles :swagger/swagger)}
     ["/swagger.json"
      {:get (swagger/create-swagger-handler)}]
     ["/swagger-ui*"
      {:get (swagger-ui/create-swagger-ui-handler
             {:url "/api/swagger.json"})}]]
    ["/login"
-    {:post {:parameters
+    {::auth/roles (auth/roles :auth/login)
+     :post {:parameters
             {:body
              {:login string?
               :password string?}}
@@ -69,13 +91,15 @@
                 (response/unauthorized
                  {:message "Incorrect login or password."})))}}]
    ["/logout"
-    {:post {:responses {200 {:body map?}}
+    {::auth/roles (auth/roles :auth/logout)
+     :post {:responses {200 {:body map?}}
             :handler (fn [{session :session}]
                        (->
                         (response/ok {:status :ok})
                         (assoc :session (dissoc session :identity))))}}]
    ["/register"
-    {:post {:parameters
+    {::auth/roles (auth/roles :account/register)
+     :post {:parameters
             {:body
              {:login string?
               :password string?
@@ -108,7 +132,8 @@
                         "Registration failed! User with login already exists"})
                       (throw e))))))}}]
    ["/session"
-    {:get
+    {::auth/roles (auth/roles :session/get)
+     :get
      {:responses
       {200
        {:body
@@ -123,42 +148,46 @@
                       {:identity
                        (not-empty
                         (select-keys identity [:login :created_at]))}}))}}]
-   ["/messages" {:get
-                 {:responses
-                  {200
-                   {:body ;; Data Spec for response body
-                    {:messages
-                     [{:id pos-int?
-                       :name string?
-                       :message string?
-                       :timestamp inst?}]}}}
-                  :handler
-                  (fn [_]
-                    (response/ok (msg/message-list)))}}]
-   ["/message" {:post
-                {:parameters
-                 {:body ;; Data spec for request body parameters
-                  {:name string?
-                   :message string?}}
+   ["/messages"
+    {::auth/roles (auth/roles :messages/list)
+     :get
+     {:responses
+      {200
+       {:body ;; Data Spec for response body
+        {:messages
+         [{:id pos-int?
+           :name string?
+           :message string?
+           :timestamp inst?}]}}}
+      :handler
+      (fn [_]
+        (response/ok (msg/message-list)))}}]
+   ["/message"
+    {::auth/roles (auth/roles :message/create!)
+     :post
+     {:parameters
+      {:body ;; Data spec for request body parameters
+       {:name string?
+        :message string?}}
                  
-                 :responses
-                 {200 {:body map?}
-                  500 {:errors map?}}
+      :responses
+      {200 {:body map?}
+       500 {:errors map?}}
 
-                 :handler
-                 (fn [{{params :body} :parameters
-                       {:keys [identity]} :session}]
-                   (try
-                     (->> 
-                      (msg/save-message! identity params)
-                      (assoc {:status :ok} :post)
-                      (response/ok))                     
-                     (catch Exception e
-                       (let [{id :guestbook/error-id
-                              errors :errors} (ex-data e)]
-                         (case id
-                           :validation
-                           (response/bad-request {:errors errors})
-                           ;; else
-                           (response/internal-server-error
-                            {:errors {:server-error ["Failed to save message!"]}}))))))}}]])
+      :handler
+      (fn [{{params :body} :parameters
+            {:keys [identity]} :session}]
+        (try
+          (->> 
+           (msg/save-message! identity params)
+           (assoc {:status :ok} :post)
+           (response/ok))                     
+          (catch Exception e
+            (let [{id :guestbook/error-id
+                   errors :errors} (ex-data e)]
+              (case id
+                :validation
+                (response/bad-request {:errors errors})
+                ;; else
+                (response/internal-server-error
+                 {:errors {:server-error ["Failed to save message!"]}}))))))}}]])
