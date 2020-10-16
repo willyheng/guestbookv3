@@ -15,3 +15,5 @@
     (db/save-message! (assoc message :author login))))
 
 
+(defn messages-by-author [author]
+  {:messages (vec (db/get-messages-by-author {:author author}))})
